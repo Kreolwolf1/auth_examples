@@ -133,16 +133,17 @@
             }).then((response) => {
                 const { username } = response.data;
 
-                const mainHolder = document.getElementById("main-holder");
-                const loginHeader = document.getElementById("login-header");
+                if (username) {
+                    const mainHolder = document.getElementById("main-holder");
+                    const loginHeader = document.getElementById("login-header");
 
-                loginForm.remove();
-                loginErrorMsg.remove();
-                loginHeader.remove();
+                    loginForm.remove();
+                    loginErrorMsg.remove();
+                    loginHeader.remove();
 
-                mainHolder.append(`Hello ${username}`);
-                logoutLink.style.opacity = 1;
-
+                    mainHolder.append(`Hello ${username}`);
+                    logoutLink.style.opacity = 1;
+                }
             });
         }
 
