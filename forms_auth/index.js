@@ -25,14 +25,8 @@ class Session {
             console.log(this.#sessions);
         } catch(e) {
             this.#sessions = {};
-            console.log(e);
         }
     }
-
-    #middleware() {
-
-    }
-
 
     #storeSessions() {
         fs.writeFileSync('./sessions.json', JSON.stringify(this.#sessions), 'utf-8');
@@ -76,6 +70,7 @@ app.use((req, res, next) => {
         sessionId = req.cookies[SESSION_KEY];
         currentSession = sessions.get(sessionId);
         if (!currentSession) {
+            currentSession = {};
             sessionId = sessions.init(res);
         }
     } else {
