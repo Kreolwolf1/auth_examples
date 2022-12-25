@@ -1,136 +1,113 @@
-const uuid = require('uuid');
 const express = require('express');
 const onFinished = require('on-finished');
 const bodyParser = require('body-parser');
 const path = require('path');
 const port = 3000;
-const fs = require('fs');
+const auth0 = require('auth0')
+const Session = require('./session.js')
+const jwt = require('jsonwebtoken')
+const {json} = require("express");
 
 const app = express();
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.urlencoded({extended: true}));
 
 const SESSION_KEY = 'Authorization';
 
-class Session {
-    #sessions = {}
-
-    constructor() {
-        try {
-            this.#sessions = fs.readFileSync('./sessions.json', 'utf8');
-            this.#sessions = JSON.parse(this.#sessions.trim());
-
-            console.log(this.#sessions);
-        } catch(e) {
-            this.#sessions = {};
-        }
-    }
-
-    #storeSessions() {
-        fs.writeFileSync('./sessions.json', JSON.stringify(this.#sessions), 'utf-8');
-    }
-
-    set(key, value) {
-        if (!value) {
-            value = {};
-        }
-        this.#sessions[key] = value;
-        this.#storeSessions();
-    }
-
-    get(key) {
-        return this.#sessions[key];
-    }
-
-    init(res) {
-        const sessionId = uuid.v4();
-        this.set(sessionId);
-
-        return sessionId;
-    }
-
-    destroy(req, res) {
-        const sessionId = req.sessionId;
-        delete this.#sessions[sessionId];
-        this.#storeSessions();
-    }
-}
-
 const sessions = new Session();
-
-app.use((req, res, next) => {
-    let currentSession = {};
-    let sessionId = req.get(SESSION_KEY);
-
-    if (sessionId) {
-        currentSession = sessions.get(sessionId);
-        if (!currentSession) {
-            currentSession = {};
-            sessionId = sessions.init(res);
-        }
-    } else {
-        sessionId = sessions.init(res);
+const AuthenticationClient = new auth0.AuthenticationClient(
+    {
+        domain: 'dev-pa5jh1kbknfmplvz.us.auth0.com',
+        clientId: 'IBD5KfpnSaNOqfhYiyqbtnw2uwrKehsP',
+        clientSecret: 'K6iFygMuS8FndiKPtsp0CVv3GE8qIfx9XKgD_madeSMNuAuk9zwIvjTXrO20NGHk'
     }
+);
 
-    req.session = currentSession;
-    req.sessionId = sessionId;
+app.use(async (req, res, next) => {
+    let authorization = req.get(SESSION_KEY);
 
-    onFinished(req, () => {
-        const currentSession = req.session;
-        const sessionId = req.sessionId;
-        sessions.set(sessionId, currentSession);
-    });
+    if (authorization) {
+        let tokens = authorization.split(';');
+        if (tokens.length === 3) {
+            req.access_token = tokens[0];
+            req.refresh_token = tokens[1];
+            req.id_token = tokens[2];
+        }
+        try {
+            let payload = jwt.decode(req.id_token);
+
+            if (Date.now() >= payload.exp * 1000) {
+                console.log('expired', payload.exp);
+
+                let refreshRequest = await AuthenticationClient.refreshToken(
+                        {
+                            refresh_token: req.refresh_token
+                        }
+                );
+
+                req.access_token = refreshRequest.access_token;
+                req.id_token = refreshRequest.id_token;
+
+                console.log("refreshed", refreshRequest);
+            }
+        } catch (err) {
+            res.status(401).send();
+            return;
+        }
+
+        res.headers = {Authorization: `${req.access_token};${req.refresh_token};${req.id_token}`}
+    }
 
     next();
-});
+})
+;
 
 app.get('/', (req, res) => {
-    if (req.session.username) {
+    if (req.access_token) {
+        let payload = jwt.decode(req.id_token);
+
         return res.json({
-            username: req.session.username,
+            username: payload.nickname,
             logout: 'http://localhost:3000/logout'
         })
     }
-    res.sendFile(path.join(__dirname+'/index.html'));
+    res.sendFile(path.join(__dirname + '/index.html'));
 })
 
 app.get('/logout', (req, res) => {
-    sessions.destroy(req, res);
+    sessionStorage.clear()
+
     res.redirect('/');
 });
 
-const users = [
-    {
-        login: 'Login',
-        password: 'Password',
-        username: 'Username',
-    },
-    {
-        login: 'Login1',
-        password: 'Password1',
-        username: 'Username1',
+app.post('/api/login', async (req, res) => {
+    const {login, password} = req.body;
+
+    let loginResult = {};
+
+    try {
+        loginResult = await auth0Login(login, password);
+    } catch (err) {
+        res.status(401).send();
+
+        return;
     }
-]
+    console.log(loginResult);
 
-app.post('/api/login', (req, res) => {
-    const { login, password } = req.body;
-
-    const user = users.find((user) => {
-        if (user.login == login && user.password == password) {
-            return true;
-        }
-        return false
-    });
-
-    if (user) {
-        req.session.username = user.username;
-        req.session.login = user.login;
-
-        res.json({ token: req.sessionId });
-    }
-
-    res.status(401).send();
+    res.json({access_token: loginResult.access_token, refresh_token: loginResult.refresh_token, id_token: loginResult.id_token});
 });
+
+async function auth0Login(login, password) {
+    const data = {
+        client_id: 'IBD5KfpnSaNOqfhYiyqbtnw2uwrKehsP',
+        username: login,
+        password: password,
+        realm: 'Username-Password-Authentication',
+        scope: 'offline_access'
+    };
+
+    return AuthenticationClient.passwordGrant(data);
+}
 
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`)
