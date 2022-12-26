@@ -6,17 +6,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login</title>
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
 </head>
 
 <body>
 <main id="main-holder">
     <a href="/logout" id="logout">Logout</a>
 
+    <h1>Register</h1>
+
+    <form id="register-form">
+  <div class="form-group">
+  <label for="exampleInputPassword1">Email Adress</label>
+  <input type="email" pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,4}$" name="email" class="form-control" aria-describedby="emailHelp" placeholder="Email">
+  </div>
+  <div class="form-group">
+    <label for="exampleInputPassword1">Password</label>
+    <input type="password" name="password" class="form-control" id="exampleInputPassword1" placeholder="Password">
+  </div>
+  <button id="register-btn" type="submit" class="btn btn-primary">Submit</button>
+</form>
+
     <h1 id="login-header">Login</h1>
 
     <div id="default-user">
-        <h3>Login: misha.muravynets@mail.com</h3>
-        <h3>Password: Pass123!</h3>
+        <h5>Login: misha.muravynets@mail.com</h5>
+        <h5>Password: Pass123!</h5>
     </div>
 
     <div id="login-error-msg-holder">
@@ -53,8 +68,8 @@
     }
 
     #main-holder {
-        width: 50%;
-        height: 70%;
+        width: 60%;
+        height: 90%;
         display: grid;
         justify-items: center;
         align-items: center;
@@ -105,7 +120,7 @@
         margin-bottom: 10px;
         border-radius: 3px;
         outline: none;
-        padding: 0px 0px 5px 5px;
+        padding: 0px 0px 2px 2px;
     }
 
     #login-form-submit {
@@ -163,12 +178,54 @@
     const loginButton = document.getElementById("login-form-submit");
     const loginErrorMsg = document.getElementById("login-error-msg");
     const logoutLink = document.getElementById("logout");
+    const registerButton = document.getElementById("register-btn");
+
+    registerButton.addEventListener("click", (e) => {
+        e.preventDefault();
+        const registerForm = document.getElementById("register-form");
+        console.log(registerForm)
+        const email = registerForm.email.value;
+        const password = registerForm.password.value;
+
+        axios({
+            method: 'post',
+            url: '/api/register',
+            data: {
+                email,
+                password
+            }
+        }).then((response) => {
+
+        })
+    })
 
     logoutLink.addEventListener("click", (e) => {
         e.preventDefault();
         sessionStorage.removeItem('session');
         location.reload();
     });
+
+    loginButton.addEventListener("click", (e) => {
+        e.preventDefault();
+        const login = loginForm.login.value;
+        const password = loginForm.password.value;
+
+
+        axios({
+            method: 'post',
+            url: '/api/login',
+            data: {
+                login,
+                password
+            }
+        }).then((response) => {
+            const {username} = response.data;
+            sessionStorage.setItem('session', JSON.stringify(response.data));
+            location.reload();
+        }).catch((response) => {
+            loginErrorMsg.style.opacity = 1;
+        });
+    })
 
     loginButton.addEventListener("click", (e) => {
         e.preventDefault();

@@ -4,9 +4,8 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const port = 3000;
 const auth0 = require('auth0')
-const Session = require('./session.js')
 const jwt = require('jsonwebtoken')
-const {json} = require("express");
+const emailValidator = require('email-validator');
 
 const app = express();
 app.use(bodyParser.json());
@@ -14,7 +13,6 @@ app.use(bodyParser.urlencoded({extended: true}));
 
 const SESSION_KEY = 'Authorization';
 
-const sessions = new Session();
 const AuthenticationClient = new auth0.AuthenticationClient(
     {
         domain: 'dev-pa5jh1kbknfmplvz.us.auth0.com',
@@ -22,6 +20,14 @@ const AuthenticationClient = new auth0.AuthenticationClient(
         clientSecret: 'K6iFygMuS8FndiKPtsp0CVv3GE8qIfx9XKgD_madeSMNuAuk9zwIvjTXrO20NGHk'
     }
 );
+
+const ManagementClient = new auth0.ManagementClient(
+    {
+        domain: 'dev-pa5jh1kbknfmplvz.us.auth0.com',
+        clientId: 'IBD5KfpnSaNOqfhYiyqbtnw2uwrKehsP',
+        clientSecret: 'K6iFygMuS8FndiKPtsp0CVv3GE8qIfx9XKgD_madeSMNuAuk9zwIvjTXrO20NGHk'
+    }
+)
 
 app.use(async (req, res, next) => {
     let authorization = req.get(SESSION_KEY);
@@ -40,9 +46,9 @@ app.use(async (req, res, next) => {
                 console.log('expired', payload.exp);
 
                 let refreshRequest = await AuthenticationClient.refreshToken(
-                        {
-                            refresh_token: req.refresh_token
-                        }
+                    {
+                        refresh_token: req.refresh_token
+                    }
                 );
 
                 req.access_token = refreshRequest.access_token;
@@ -94,7 +100,39 @@ app.post('/api/login', async (req, res) => {
     }
     console.log(loginResult);
 
-    res.json({access_token: loginResult.access_token, refresh_token: loginResult.refresh_token, id_token: loginResult.id_token});
+    res.json({
+        access_token: loginResult.access_token,
+        refresh_token: loginResult.refresh_token,
+        id_token: loginResult.id_token
+    });
+});
+
+
+app.post('/api/register', async (req, res) => {
+    const {email, password} = req.body;
+    let createResult = {}
+
+    try {
+        createResult = await ManagementClient.createUser(
+            {
+                email: email,
+                password: password,
+                connection: 'Username-Password-Authentication'
+            }
+        );
+
+        if (createResult instanceof Error) {
+            throw createResult;
+        }
+    } catch (err) {
+        res.status(400).send();
+        console.log(err);
+
+        return;
+    }
+
+    console.log(createResult)
+    res.status(200).send();
 });
 
 async function auth0Login(login, password) {
