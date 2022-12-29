@@ -6,12 +6,13 @@ const port = 3000;
 const auth0 = require('auth0')
 const jwt = require('jsonwebtoken')
 const emailValidator = require('email-validator');
+const {auth, requiredScopes} = require('express-oauth2-jwt-bearer');
 
 const app = express();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
 
-const SESSION_KEY = 'Authorization';
+const AUTHORIZATION_KEY = 'Authorization';
 
 const AuthenticationClient = new auth0.AuthenticationClient(
     {
@@ -30,17 +31,15 @@ const ManagementClient = new auth0.ManagementClient(
 )
 
 app.use(async (req, res, next) => {
-    let authorization = req.get(SESSION_KEY);
+    let authorization = req.get(AUTHORIZATION_KEY);
+    let refresh = req.get('Refresh');
 
     if (authorization) {
-        let tokens = authorization.split(';');
-        if (tokens.length === 3) {
-            req.access_token = tokens[0];
-            req.refresh_token = tokens[1];
-            req.id_token = tokens[2];
-        }
+        req.access_token = authorization.split(' ')[1];
+        req.refresh_token = refresh;
         try {
-            let payload = jwt.decode(req.id_token);
+            let payload = jwt.decode(req.access_token);
+            console.log(payload)
 
             if (Date.now() >= payload.exp * 1000) {
                 console.log('expired', payload.exp);
@@ -52,28 +51,27 @@ app.use(async (req, res, next) => {
                 );
 
                 req.access_token = refreshRequest.access_token;
-                req.id_token = refreshRequest.id_token;
 
                 console.log("refreshed", refreshRequest);
             }
         } catch (err) {
+            console.log(err)
             res.status(401).send();
             return;
         }
 
-        res.headers = {Authorization: `${req.access_token};${req.refresh_token};${req.id_token}`}
+        res.headers = {Authorization: `${req.access_token};${req.refresh_token}`}
     }
 
     next();
-})
-;
+});
 
 app.get('/', (req, res) => {
     if (req.access_token) {
-        let payload = jwt.decode(req.id_token);
+        let payload = jwt.decode(req.access_token);
 
         return res.json({
-            username: payload.nickname,
+            username: payload.sub,
             logout: 'http://localhost:3000/logout'
         })
     }
@@ -95,17 +93,27 @@ app.post('/api/login', async (req, res) => {
         loginResult = await auth0Login(login, password);
     } catch (err) {
         res.status(401).send();
-
+        console.log(err);
         return;
     }
     console.log(loginResult);
 
     res.json({
         access_token: loginResult.access_token,
-        refresh_token: loginResult.refresh_token,
-        id_token: loginResult.id_token
+        refresh_token: loginResult.refresh_token
     });
 });
+
+const checkJwt = auth({
+    audience: 'https://dev-pa5jh1kbknfmplvz.us.auth0.com/api/v2/',
+    issuerBaseURL: `https://dev-pa5jh1kbknfmplvz.us.auth0.com`,
+});
+
+app.get('/api/private', checkJwt, (req, res) => {
+    res.json({
+        message: 'You are authenticated'
+    })
+})
 
 
 app.post('/api/register', async (req, res) => {
@@ -137,6 +145,7 @@ app.post('/api/register', async (req, res) => {
 
 async function auth0Login(login, password) {
     const data = {
+        audience: 'https://dev-pa5jh1kbknfmplvz.us.auth0.com/api/v2/',
         client_id: 'IBD5KfpnSaNOqfhYiyqbtnw2uwrKehsP',
         username: login,
         password: password,
